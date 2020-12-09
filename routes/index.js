@@ -1,8 +1,21 @@
 const express = require("express");
 const admin = require("firebase-admin");
+const firebase = require("firebase");
 const serviceAccount = require("../serviceAccount.json");
 
 const router = express.Router();
+
+const firebaseConfig = {
+    apiKey: "AIzaSyAucUI2eL8Etrb5I1uge49FkLhf57UElkA",
+    authDomain: "quotes-bck.firebaseapp.com",
+    projectId: "quotes-bck",
+    storageBucket: "quotes-bck.appspot.com",
+    messagingSenderId: "985364080681",
+    appId: "1:985364080681:web:6756e23233fabd3585d438"
+}
+
+// Inizializzazione Firebase
+firebase.initializeApp(firebaseConfig);
 
 quotes = [];
 
@@ -21,6 +34,32 @@ async function updateQuotes() {
     const list = await db.collection("quotes").get();
     list.forEach(doc => quotes.push(doc.data()));
 }
+
+let access = false;
+
+router.post("/login", async (req, res) => {
+    try{
+        if (!req.body.email || !req.body.password) {
+            return res.status(400).json({message: "Bad request: missing email or password!"});
+        }
+        const user = await firebase.auth().signInWithEmailAndPassword(req.body.email, req.body.password);
+        const token = await user.user.getIdToken();
+        if(token) {access = true;}
+        return res.status(201).json({token});
+    } catch(error) {
+        return res.status(500).send(error);
+    }   
+});
+
+router.get("/logout", async (req, res) => {
+    try{
+        const user = await firebase.auth().signOut();
+        access = false;
+        return res.status(200).json({message: "Log out"});
+    } catch(error) {
+        return res.status(500).send(error);
+    }   
+});
 
 router.get("/quotes", async (req, res) => {
     try {
@@ -45,6 +84,8 @@ router.get("/quotes/:id", async (req, res) => {
 
 router.post("/quotes", async (req, res) => {
     try {
+        if(!access) {return res.status(401).json({message: "Account not autenticated!"});}
+
         await updateQuotes();
         if (!req.body.author || !req.body.quote) {
             return res.status(400).json({message: "Bad request: missing quote or author in the request body!"});
@@ -64,6 +105,8 @@ router.post("/quotes", async (req, res) => {
 
 router.patch("/quotes/:id", async (req, res) => {
     try {
+        if(!access) {return res.status(401).json({message: "Account not autenticated!"});}
+
         quotes.length = 0;
         const list = await db.collection("quotes").get();
         list.forEach(doc => quotes.push(doc.data()));
@@ -99,6 +142,7 @@ router.patch("/quotes/:id", async (req, res) => {
 
 router.delete("/quotes/:id", async (req, res) => {
     try {
+        if(!access) {return res.status(401).json({message: "Account not autenticated!"});}
 
         const q = await db.collection('quotes').doc(req.params.id).get();
         if (!q.data()) {
